@@ -1,0 +1,8 @@
+{
+  "model_name": "RandomForest-Baseline",
+  "architecture": "Random Forest on molecular fingerprints",
+  "parameters": 15000,
+  "inference_time_ms": 2.5,
+  "framework": "scikit-learn",
+  "notes": "Test submission for PR workflow validation"
+}
