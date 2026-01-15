@@ -1,0 +1,16 @@
+{
+  "model_name": "GAT-DDI",
+  "architecture": "Graph Attention Network with 3 attention heads",
+  "description": "Graph Attention Network for Drug-Drug Interaction prediction using molecular graph representations",
+  "parameters": 125000,
+  "hidden_dim": 128,
+  "num_layers": 3,
+  "attention_heads": 3,
+  "dropout": 0.3,
+  "learning_rate": 0.001,
+  "epochs_trained": 150,
+  "inference_time_ms": 4.2,
+  "framework": "PyTorch Geometric",
+  "author": "Eldin",
+  "notes": "GAT model with multi-head attention for capturing important molecular substructures in DDI prediction"
+}
