@@ -1,0 +1,80 @@
+# ============================================================
+# GNN Molecular Graph Classification Challenge – Configuration
+# ============================================================
+# This file is the single source of truth for competition settings.
+# CI workflows, evaluate.py, validate_submission.py, and
+# render_leaderboard.py all read from here.
+
+competition:
+  name: "GNN Molecular Graph Classification Challenge"
+  short_name: "gnn-molbace"
+  description: >
+    Predict BACE-1 enzyme inhibition using Graph Neural Networks
+    on the OGB MolBACE dataset (scaffold split).
+  version: "1.0"
+  organiser: "BASIRA Lab"
+
+dataset:
+  name: "OGB MolBACE"
+  source: "https://ogb.stanford.edu/docs/graphprop/#ogbg-mol"
+  task: "binary_classification"
+  num_classes: 2
+  split_strategy: "scaffold"
+  counts:
+    train: 1210
+    valid: 151
+    test: 152
+
+metrics:
+  primary:
+    name: "macro_f1"
+    display_name: "Macro F1"
+    higher_is_better: true
+  secondary:
+    - name: "efficiency"
+      display_name: "Efficiency"
+      higher_is_better: true
+      formula: "F1² / (log₁₀(time_ms) × log₁₀(params))"
+    - name: "cliff_accuracy"
+      display_name: "Cliff Acc"
+      higher_is_better: true
+      description: "MMP-OOD pairwise activity-cliff accuracy"
+
+submission:
+  file_name: "predictions.csv"
+  metadata_file: "metadata.json"
+  path_pattern: "submissions/inbox/{team_name}/{run_id}/"
+  columns:
+    - name: "id"
+      dtype: "int"
+      description: "Molecule ID matching data/public/test.csv"
+    - name: "y_pred"
+      dtype: "int"
+      allowed_values: [0, 1]
+      description: "Predicted binary label"
+  legacy_pred_column: "target"          # accept old column name with warning
+  max_submissions_per_team: 1           # each team may submit only once
+  submission_types: ["human", "llm", "human+llm", "baseline"]  # metadata.submission_type
+
+labels:
+  # Primary: inject via GitHub Secret (base64-encoded CSV)
+  secret_name: "TEST_LABELS_CSV"
+  # Fallback: clone private repo
+  private_repo: "muuki2/gnn-ddi-private"
+  private_repo_token_secret: "PRIVATE_REPO_TOKEN"
+
+leaderboard:
+  csv_path: "leaderboard/leaderboard.csv"
+  md_path: "leaderboard/leaderboard.md"
+  columns:
+    - "rank"
+    - "team"
+    - "macro_f1"
+    - "efficiency"
+    - "params"
+    - "time_ms"
+    - "cliff_accuracy"
+    - "submission_type"
+    - "submitted_at"
+  sort_by: "macro_f1"
+  sort_order: "descending"

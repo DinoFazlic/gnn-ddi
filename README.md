@@ -189,50 +189,52 @@ print(f"Label: {graph.y.item()}")
 Create a CSV file with predictions for all test molecules:
 
 ```csv
-id,target
+id,y_pred
 0,1
 1,0
 6,1
 ...
 ```
 
-- `id`: Molecule index from `data/test.csv`
-- `target`: Your binary prediction (0 or 1)
+- `id`: Molecule index from `data/public/test.csv`
+- `y_pred`: Your binary prediction (0 or 1)
+  - *Legacy column name* `target` is still accepted but deprecated
 
 ### Step 2: Submit via Pull Request
 
 1. **Fork** this repository
-2. Add your submission file to `submissions/` folder
-   - Name it `your_github_username.csv`
+2. Add your submission to `submissions/inbox/<your_team>/<run_id>/`:
+   ```
+   submissions/inbox/alice/run_01/predictions.csv   # required
+   submissions/inbox/alice/run_01/metadata.json      # optional
+   ```
 3. Create a **Pull Request** to the main repository
+
+> **Legacy format** (flat `submissions/your_username.csv`) is still accepted for backward compatibility.
 
 ### Automated Evaluation
 
-When you open a Pull Request, the system automatically:
+When you open a Pull Request, the CI system automatically:
 
-1. **Validates** your submission format
-2. **Evaluates** against hidden test labels (stored in a private repository)
+1. **Validates** your submission format (`competition/validate_submission.py`)
+2. **Evaluates** against hidden test labels (`competition/evaluate.py`)
 3. **Comments** on your PR with your Macro F1 score
-4. **Updates** the [leaderboard](leaderboard.md) with your result
+4. **Updates** the [leaderboard](leaderboard/leaderboard.md) and [interactive board](https://muuki2.github.io/gnn-ddi/leaderboard.html)
 
-The test labels are **never exposed** to participants — they are fetched from a private repository during GitHub Actions execution, ensuring fair evaluation.
+Test labels are **never committed** to the repository — they are injected by CI via GitHub Secrets.
 
 ### Optional: Efficiency Metadata
 
-To appear on the leaderboard with efficiency metrics, include a metadata file:
+To appear on the leaderboard with efficiency metrics, include a `metadata.json`:
 
-**Format:** Create `submissions/your_username_metadata.yaml`:
-
-```yaml
-team_name: your_team
-model_name: MyGNN
-model_architecture:
-  type: GCN
-  num_layers: 3
-  hidden_dim: 64
-efficiency_metrics:
-  inference_time_ms: 5.2
-  total_params: 45000
+```json
+{
+  "team_name": "alice",
+  "model_name": "MyGNN",
+  "submission_type": "human",
+  "model_architecture": {"type": "GCN", "num_layers": 3, "hidden_dim": 64},
+  "efficiency_metrics": {"inference_time_ms": 5.2, "total_params": 45000}
+}
 ```
 
 Use `evaluation/speed_benchmark.py` to measure these values:
@@ -248,26 +250,28 @@ print(f"Parameters: {metrics.total_params}")
 
 See `schema/submission_metadata.json` for the full schema.
 
-### Submission Format
+### Submission Layout
 
 ```
 submissions/
-├── sample_submission.csv     # Example format (152 predictions)
-├── your_username.csv         # Your submission
-└── your_username_metadata.yaml  # Optional efficiency metadata
+└── inbox/
+    └── your_team/
+        └── run_01/
+            ├── predictions.csv       # Required (152 predictions: id, y_pred)
+            └── metadata.json         # Optional (efficiency + model info)
 ```
 
 ---
 
 ## Current Leaderboard
 
-| Rank | Participant | Macro-F1 | Efficiency | Params |
-|------|-------------|----------|------------|--------|
-| 🥇 1 | *Baseline-GCN* | 0.6153 | - | 45K |
-| 🥈 2 | *Baseline-GIN* | 0.6103 | - | 52K |
-| 🥉 3 | *Baseline-GraphSAGE* | 0.5835 | - | 48K |
+| Rank | Team | Macro-F1 | Efficiency | Params |
+|------|------|----------|------------|--------|
+| 🥇 1 | Baseline-Spectral | 0.7215 | 0.6360 | 40.4K |
+| 🥈 2 | Baseline-DMPNN | 0.6674 | 0.0833 | 53.6K |
+| 🥉 3 | Baseline-GCN | 0.6153 | - | - |
 
-[View Full Leaderboard](leaderboard.md)
+[View Full Leaderboard](leaderboard/leaderboard.md) · [Interactive Leaderboard](https://muuki2.github.io/gnn-ddi/leaderboard.html)
 
 ---
 
@@ -484,49 +488,66 @@ Higher hypervolume indicates better overall performance.
 
 ```
 gnn-ddi/
+├── competition/                # 🏗️ Competition infrastructure (template-compliant)
+│   ├── config.yaml             # Single source of truth for settings
+│   ├── evaluate.py             # Main scoring entry-point (used by CI)
+│   ├── metrics.py              # Metric computation (Macro-F1, Efficiency)
+│   ├── validate_submission.py  # Submission format validation
+│   └── render_leaderboard.py   # Generate leaderboard.md + docs JS
 ├── data/
-│   ├── train.csv           # Training molecule indices
-│   ├── valid.csv           # Validation molecule indices
-│   ├── test.csv            # Test molecule indices (labels hidden)
-│   └── ogb/                # OGB dataset (auto-downloaded)
+│   ├── public/                 # 📂 Public data (accessible to participants)
+│   │   ├── train.csv           # Training molecule indices
+│   │   ├── valid.csv           # Validation molecule indices
+│   │   └── test.csv            # Test molecule indices (labels hidden)
+│   ├── mmp_split/              # MMP-OOD activity-cliff split
+│   └── ogb/                    # OGB dataset (auto-downloaded)
 ├── submissions/
-│   ├── sample_submission.csv
-│   ├── gcn_submission.csv
-│   ├── gin_submission.csv
-│   └── graphsage_submission.csv
+│   └── inbox/                  # 📥 Submit here: inbox/<team>/<run_id>/
+│       └── sample/run_01/      #     predictions.csv + metadata.json
+├── leaderboard/
+│   ├── leaderboard.csv         # 📊 Authoritative leaderboard data
+│   └── leaderboard.md          # Auto-generated Markdown (do not edit)
+├── docs/                       # 🌐 GitHub Pages interactive leaderboard
+│   ├── leaderboard.html
+│   ├── leaderboard.css
+│   ├── leaderboard.js
+│   └── PRIVATE_REPO_SETUP.md
 ├── starter_code/
-│   ├── baseline.py         # Baseline models (GraphSAGE, GCN, GIN)
-│   └── requirements.txt    # Python dependencies
+│   ├── baseline.py             # Baseline models (GraphSAGE, GCN, GIN)
+│   └── requirements.txt        # Training dependencies
 ├── advanced_baselines/
-│   ├── dmpnn.py            # Directed Message Passing NN
-│   └── spectral_gnn.py     # Spectral GNN with Laplacian regularization
+│   ├── dmpnn.py                # Directed Message Passing NN
+│   ├── spectral_gnn.py         # Spectral GNN + Laplacian regularization
+│   └── train_advanced.py       # Training driver for advanced models
 ├── evaluation/
-│   ├── speed_benchmark.py  # Performance profiling
-│   ├── uncertainty.py      # Uncertainty quantification
-│   └── adversarial.py      # Adversarial robustness tests
+│   ├── speed_benchmark.py      # Performance profiling
+│   ├── uncertainty.py          # Uncertainty quantification
+│   ├── adversarial.py          # Adversarial robustness tests
+│   └── mmp_ood.py              # MMP-OOD activity-cliff evaluation
 ├── visualization/
-│   └── pareto_plot.py      # Pareto front visualization
-├── schema/
-│   └── submission_metadata.json  # Metadata JSON schema
+│   └── pareto_plot.py          # Pareto front analysis
 ├── scripts/
-│   └── generate_labels.py  # Label generation utility
-├── docs/
-│   └── PRIVATE_REPO_SETUP.md  # Private repo setup guide
-├── .github/
-│   └── workflows/
-│       └── evaluate.yml    # Automated scoring workflow
-├── scoring_script.py       # Evaluation script (Macro F1 + Efficiency)
-├── update_leaderboard.py   # Leaderboard update utility
-├── leaderboard.md          # Current standings
+│   ├── generate_labels.py      # Label generation utility
+│   ├── generate_mmp_split.py   # MMP-OOD split generator
+│   ├── run_mmp_evaluation.py   # End-to-end MMP evaluation
+│   └── run_local_tests.py      # Local test suite (45 tests)
+├── schema/
+│   └── submission_metadata.json
+├── .github/workflows/
+│   └── evaluate.yml            # CI: validate → score → update leaderboard
+├── scoring_script.py           # Legacy scoring (kept for compatibility)
+├── update_leaderboard.py       # Legacy leaderboard updater
+├── requirements.txt            # CI infrastructure dependencies
 └── README.md
 ```
 
-### Hidden Infrastructure
+### Label Security
 
-Test and validation labels are stored in a **private repository** (`gnn-ddi-private`) and are only accessed during GitHub Actions evaluation. This ensures:
-- Participants cannot access ground truth labels
-- Fair and tamper-proof evaluation
-- Transparent scoring via automated comments
+Test and validation labels are **never committed** to this repository.  During CI they are injected via:
+1. **GitHub Secret** `TEST_LABELS_CSV` (preferred — base64-encoded CSV), or
+2. **Private repository** `gnn-ddi-private` (fallback — cloned with `PRIVATE_REPO_TOKEN`)
+
+This ensures fair, tamper-proof evaluation with transparent scoring via automated PR comments.
 
 ---
 
@@ -534,8 +555,8 @@ Test and validation labels are stored in a **private repository** (`gnn-ddi-priv
 
 1. **No external data**: Use only the provided OGB MolBACE dataset
 2. **No pre-trained models**: Train from scratch; pre-trained molecular embeddings are not allowed
-3. **One submission per PR**: Each pull request should contain exactly one submission file
-4. **Best score kept**: Multiple submissions allowed; the leaderboard shows your best score
+3. **One submission per team**: Each team may submit **only once** — make it count!
+4. **One submission per PR**: Each pull request should contain exactly one predictions file
 5. **Code sharing encouraged**: You may share code and ideas, but submit individually
 6. **Fair play**: Do not attempt to access test labels or exploit the evaluation system
 
@@ -550,7 +571,7 @@ Test and validation labels are stored in a **private repository** (`gnn-ddi-priv
 > Use the validation set to evaluate your model locally. Training labels are available via OGB; only test labels are hidden.
 
 **Q: Can I submit multiple times?**
-> Yes. The leaderboard keeps your best score. Each submission triggers a fresh evaluation.
+> No. Each team is limited to **one submission** — make it count! If you need to correct an error, contact the organisers.
 
 **Q: How does the automated scoring work?**
 > When you open a PR, GitHub Actions fetches the hidden test labels from a private repository, runs the scoring script, and comments on your PR with the result.

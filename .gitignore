@@ -92,7 +92,7 @@ checkpoints/
 logs/
 *.log
 
-# Ground truth labels (should be kept secret)
+# Ground truth labels (MUST NOT be committed — injected by CI)
 data/test_labels.csv
 data/valid_labels.csv
 
@@ -101,6 +101,10 @@ private_data/
 
 # Temporary private data for label generation
 temp_private_data/
+
+# CI artefacts
+_results.json
+scoring_output.txt
 
 # Temporary files
 *.tmp

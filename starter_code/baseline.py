@@ -339,6 +339,8 @@ def main():
     parser.add_argument('--lr', type=float, default=0.001, help='Learning rate')
     parser.add_argument('--batch_size', type=int, default=32, help='Batch size')
     parser.add_argument('--dropout', type=float, default=0.3, help='Dropout rate')
+    parser.add_argument('--mmp-ood', action='store_true',
+                        help='Use MMP-OOD split instead of default OGB scaffold split')
     args = parser.parse_args()
     
     # Configuration
@@ -359,14 +361,30 @@ def main():
     print("\nLoading OGB MolBACE dataset...")
     dataset = PygGraphPropPredDataset(name='ogbg-molbace', root='../data/ogb')
     
-    # Get official train/valid/test splits (scaffold split)
-    split_idx = dataset.get_idx_split()
-    train_idx = split_idx['train']
-    valid_idx = split_idx['valid']
-    test_idx = split_idx['test']
+    # Get train/valid/test splits
+    if args.mmp_ood:
+        # Use MMP-OOD split (activity-cliff-based)
+        mmp_split_dir = os.path.join('..', 'data', 'mmp_split')
+        if not os.path.exists(mmp_split_dir):
+            print("Error: MMP-OOD split not found. Run 'python scripts/generate_mmp_split.py' first.")
+            sys.exit(1)
+        print("Using MMP-OOD split (activity-cliff-based)")
+        _mmp_train = pd.read_csv(os.path.join(mmp_split_dir, 'train.csv'))['index'].values
+        _mmp_valid = pd.read_csv(os.path.join(mmp_split_dir, 'valid.csv'))['index'].values
+        _mmp_test = pd.read_csv(os.path.join(mmp_split_dir, 'test.csv'))['index'].values
+        train_idx = torch.tensor(_mmp_train)
+        valid_idx = torch.tensor(_mmp_valid)
+        test_idx = torch.tensor(_mmp_test)
+    else:
+        # Default OGB scaffold split
+        split_idx = dataset.get_idx_split()
+        train_idx = split_idx['train']
+        valid_idx = split_idx['valid']
+        test_idx = split_idx['test']
     
     print(f"Dataset size: {len(dataset)}")
-    print(f"Train: {len(train_idx)}, Valid: {len(valid_idx)}, Test: {len(test_idx)}")
+    split_name = 'MMP-OOD' if args.mmp_ood else 'scaffold'
+    print(f"Split ({split_name}): Train: {len(train_idx)}, Valid: {len(valid_idx)}, Test: {len(test_idx)}")
     print(f"Number of node features: {dataset.num_node_features}")
     
     # Create data loaders

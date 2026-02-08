@@ -220,6 +220,8 @@ def main():
     parser.add_argument('--hidden', type=int, default=64, help='Hidden dimension')
     parser.add_argument('--lr', type=float, default=0.001, help='Learning rate')
     parser.add_argument('--batch_size', type=int, default=32, help='Batch size')
+    parser.add_argument('--mmp-ood', action='store_true',
+                        help='Use MMP-OOD split instead of default OGB scaffold split')
     args = parser.parse_args()
     
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -229,11 +231,23 @@ def main():
     print("\nLoading OGB MolBACE dataset...")
     dataset = PygGraphPropPredDataset(name='ogbg-molbace', root='../data/ogb')
     
-    split_idx = dataset.get_idx_split()
-    train_idx, valid_idx, test_idx = split_idx['train'], split_idx['valid'], split_idx['test']
+    # Get train/valid/test splits
+    if args.mmp_ood:
+        mmp_split_dir = os.path.join('..', 'data', 'mmp_split')
+        if not os.path.exists(mmp_split_dir):
+            print("Error: MMP-OOD split not found. Run 'python scripts/generate_mmp_split.py' first.")
+            sys.exit(1)
+        print("Using MMP-OOD split (activity-cliff-based)")
+        train_idx = torch.tensor(pd.read_csv(os.path.join(mmp_split_dir, 'train.csv'))['index'].values)
+        valid_idx = torch.tensor(pd.read_csv(os.path.join(mmp_split_dir, 'valid.csv'))['index'].values)
+        test_idx = torch.tensor(pd.read_csv(os.path.join(mmp_split_dir, 'test.csv'))['index'].values)
+    else:
+        split_idx = dataset.get_idx_split()
+        train_idx, valid_idx, test_idx = split_idx['train'], split_idx['valid'], split_idx['test']
     
+    split_name = 'MMP-OOD' if args.mmp_ood else 'scaffold'
     print(f"Dataset: {len(dataset)} molecules")
-    print(f"Train: {len(train_idx)}, Valid: {len(valid_idx)}, Test: {len(test_idx)}")
+    print(f"Split ({split_name}): Train: {len(train_idx)}, Valid: {len(valid_idx)}, Test: {len(test_idx)}")
     print(f"Node features: {dataset.num_node_features}")
     
     # Create loaders

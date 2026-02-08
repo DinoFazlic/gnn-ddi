@@ -1,0 +1,13 @@
+{
+  "num_pairs": 1372,
+  "num_test_molecules": 709,
+  "num_train_molecules": 563,
+  "num_valid_molecules": 62,
+  "num_excluded_by_scaffold": 179,
+  "num_unique_test_scaffolds": 310,
+  "threshold_used": 0.7,
+  "scaffold_exclusion": "strict",
+  "tanimoto_mean": 0.768644446805265,
+  "tanimoto_min": 0.7,
+  "tanimoto_max": 1.0
+}

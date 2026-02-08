@@ -84,11 +84,18 @@ def test_imports():
         ("advanced_baselines.spectral_gnn", "SpectralGNN, LaplacianRegularization"),
     ]
     
-    # Add pareto_plot only if matplotlib is available
+    # Add modules that need optional dependencies
     if has_matplotlib:
         modules.append(("visualization.pareto_plot", "compute_pareto_front, plot_pareto_front"))
     else:
         skip_test("import visualization.pareto_plot", "matplotlib not installed")
+    
+    # MMP-OOD requires rdkit
+    try:
+        import rdkit
+        modules.append(("evaluation.mmp_ood", "MmpOodMetrics, evaluate_mmp_ood"))
+    except ImportError:
+        skip_test("import evaluation.mmp_ood", "rdkit not installed")
     
     for module_name, components in modules:
         try:
@@ -545,6 +552,111 @@ def test_metadata_schema():
         traceback.print_exc()
 
 
+def test_mmp_ood():
+    """Test MMP-OOD evaluation module."""
+    print_header("Testing MMP-OOD Evaluation")
+
+    # Check if RDKit is available
+    try:
+        from rdkit import Chem
+        has_rdkit = True
+    except ImportError:
+        has_rdkit = False
+        skip_test("MMP-OOD evaluation", "rdkit not installed")
+        return
+
+    try:
+        from evaluation.mmp_ood import (
+            ActivityCliffPair,
+            MmpOodMetrics,
+            MmpOodSplit,
+            compute_ecfp_fingerprints,
+            get_murcko_scaffold,
+            find_activity_cliff_pairs,
+            compute_cliff_accuracy_hard,
+            compute_cliff_accuracy_prob,
+            evaluate_mmp_ood,
+            save_pairs_csv,
+            load_pairs_csv,
+        )
+        print_result("import evaluation.mmp_ood", True)
+
+        # Test fingerprint computation
+        smiles = ["CCO", "CCCO", "c1ccccc1", "CC(=O)O", "C"]
+        fps, valid = compute_ecfp_fingerprints(smiles)
+        print_result("ECFP fingerprint computation",
+                     all(valid) and len(fps) == 5,
+                     f"valid={sum(valid)}/{len(smiles)}")
+
+        # Test scaffold extraction
+        scaf = get_murcko_scaffold("c1ccc(CC(=O)O)cc1")
+        print_result("Murcko scaffold extraction",
+                     scaf is not None and len(scaf) > 0,
+                     f"scaffold='{scaf}'")
+
+        # Test ActivityCliffPair dataclass
+        pair = ActivityCliffPair(
+            mol_idx_a=0, mol_idx_b=1, tanimoto=0.85,
+            smiles_a="CCO", smiles_b="CCCO"
+        )
+        print_result("ActivityCliffPair creation", pair.tanimoto == 0.85)
+
+        # Test cliff accuracy (hard labels)
+        pairs = [
+            ActivityCliffPair(mol_idx_a=0, mol_idx_b=1, tanimoto=0.9),
+            ActivityCliffPair(mol_idx_a=2, mol_idx_b=3, tanimoto=0.8),
+        ]
+        # Pair 0: correct (active=1, inactive=0)
+        # Pair 1: wrong (active=0, inactive=1)
+        predictions = {0: 1, 1: 0, 2: 0, 3: 1}
+        acc, results = compute_cliff_accuracy_hard(pairs, predictions)
+        print_result("Cliff accuracy (hard labels)",
+                     abs(acc - 0.5) < 0.01 and len(results) == 2,
+                     f"acc={acc:.2f}, results={results}")
+
+        # Test cliff accuracy (probabilities)
+        probs = {0: 0.9, 1: 0.2, 2: 0.3, 3: 0.7}
+        acc_p, results_p = compute_cliff_accuracy_prob(pairs, probs)
+        print_result("Cliff accuracy (probabilities)",
+                     abs(acc_p - 0.5) < 0.01,
+                     f"acc={acc_p:.2f}")
+
+        # Test full evaluate_mmp_ood
+        import numpy as np
+        test_idx = np.array([0, 1, 2, 3])
+        y_true = {0: 1, 1: 0, 2: 1, 3: 0}
+        y_pred = {0: 1, 1: 0, 2: 0, 3: 1}
+        metrics = evaluate_mmp_ood(pairs, test_idx, y_true, y_pred)
+        print_result("evaluate_mmp_ood",
+                     0 <= metrics.macro_f1 <= 1 and 0 <= metrics.cliff_accuracy <= 1,
+                     f"F1={metrics.macro_f1:.4f}, cliff_acc={metrics.cliff_accuracy:.4f}")
+
+        # Test MmpOodMetrics.to_dict
+        d = metrics.to_dict()
+        print_result("MmpOodMetrics.to_dict",
+                     'macro_f1' in d and 'cliff_accuracy' in d,
+                     f"keys={list(d.keys())}")
+
+        # Test save/load pairs CSV roundtrip
+        import tempfile
+        with tempfile.NamedTemporaryFile(suffix='.csv', delete=False, mode='w') as f:
+            tmp_path = f.name
+        try:
+            save_pairs_csv(pairs, tmp_path)
+            loaded = load_pairs_csv(tmp_path)
+            print_result("Pairs CSV roundtrip",
+                         len(loaded) == 2
+                         and loaded[0].mol_idx_a == 0
+                         and abs(loaded[0].tanimoto - 0.9) < 0.001,
+                         f"loaded {len(loaded)} pairs")
+        finally:
+            os.remove(tmp_path)
+
+    except Exception as e:
+        print_result("MMP-OOD tests", False, str(e))
+        traceback.print_exc()
+
+
 def print_summary():
     """Print test summary."""
     print("\n" + "=" * 60)
@@ -595,6 +707,7 @@ def main():
         "dmpnn": test_dmpnn,
         "spectral": test_spectral_gnn,
         "schema": test_metadata_schema,
+        "mmp_ood": test_mmp_ood,
     }
     
     if args.test:

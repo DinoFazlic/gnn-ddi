@@ -86,12 +86,13 @@ def load_leaderboard(leaderboard_path: str) -> List[Dict[str, Any]]:
                         'efficiency': None,
                         'params': None,
                         'time_ms': None,
+                        'cliff_accuracy': None,
                         'date': ''
                     }
                     
                     # Parse extended format (with efficiency metrics)
                     if num_columns >= 7 and len(parts) >= 6:
-                        # Format: Rank | Participant | Macro-F1 | Efficiency | Params | Time | Date
+                        # Format: Rank | Participant | Macro-F1 | Efficiency | Params | Time | Cliff Acc | Date
                         eff_str = parts[3].strip()
                         if eff_str and eff_str != '-':
                             entry['efficiency'] = float(eff_str)
@@ -104,7 +105,16 @@ def load_leaderboard(leaderboard_path: str) -> List[Dict[str, Any]]:
                         if time_str and time_str != '-':
                             entry['time_ms'] = float(time_str)
                         
-                        entry['date'] = parts[6].strip() if len(parts) > 6 else ''
+                        # Cliff accuracy column (index 6) if present
+                        if len(parts) > 6:
+                            cliff_str = parts[6].strip()
+                            if cliff_str and cliff_str != '-':
+                                try:
+                                    entry['cliff_accuracy'] = float(cliff_str)
+                                except ValueError:
+                                    pass
+                        
+                        entry['date'] = parts[7].strip() if len(parts) > 7 else (parts[6].strip() if len(parts) > 6 and not parts[6].strip().replace('.', '').isdigit() else '')
                     else:
                         # Old format: Rank | Participant | Score | Date
                         entry['date'] = parts[3].strip() if len(parts) > 3 else ''
@@ -147,8 +157,8 @@ def save_leaderboard(leaderboard_path: str, entries: List[Dict[str, Any]]) -> No
         f.write("---\n\n")
         
         # Table header (extended format)
-        f.write("| Rank | Participant | Macro-F1 | Efficiency | Params | Time (ms) | Last Updated |\n")
-        f.write("|------|-------------|----------|------------|--------|-----------|---------------|\n")
+        f.write("| Rank | Participant | Macro-F1 | Efficiency | Params | Time (ms) | Cliff Acc | Last Updated |\n")
+        f.write("|------|-------------|----------|------------|--------|-----------|-----------|-----------------|\n")
         
         # Table rows
         for i, entry in enumerate(entries, 1):
@@ -171,8 +181,9 @@ def save_leaderboard(leaderboard_path: str, entries: List[Dict[str, Any]]) -> No
             eff_str = f"{entry['efficiency']:.4f}" if entry.get('efficiency') else '-'
             params_str = format_params(entry.get('params'))
             time_str = f"{entry['time_ms']:.1f}" if entry.get('time_ms') else '-'
+            cliff_str = f"{entry['cliff_accuracy']:.4f}" if entry.get('cliff_accuracy') is not None else '-'
             
-            f.write(f"| {rank_str} | {participant} | {entry['score']:.4f} | {eff_str} | {params_str} | {time_str} | {entry['date']} |\n")
+            f.write(f"| {rank_str} | {participant} | {entry['score']:.4f} | {eff_str} | {params_str} | {time_str} | {cliff_str} | {entry['date']} |\n")
         
         # Footer
         f.write("\n---\n\n")
@@ -180,7 +191,8 @@ def save_leaderboard(leaderboard_path: str, entries: List[Dict[str, Any]]) -> No
         f.write("- **Macro-F1**: Primary ranking metric (harmonic mean of class-wise F1 scores)\n")
         f.write("- **Efficiency**: Higher is better - rewards both accuracy and computational efficiency\n")
         f.write("- **Params**: Total number of trainable parameters\n")
-        f.write("- **Time (ms)**: Average inference time per batch\n\n")
+        f.write("- **Time (ms)**: Average inference time per batch\n")
+        f.write("- **Cliff Acc**: MMP-OOD Pairwise Cliff Accuracy — fraction of activity-cliff pairs correctly ranked\n\n")
         f.write("*Italic entries are baseline models provided by organizers.*\n\n")
         f.write(f"*Last updated: {datetime.now().strftime('%Y-%m-%d %H:%M UTC')}*\n")
 
@@ -246,6 +258,7 @@ def main():
     parser.add_argument('--efficiency', type=float, default=None, help='Pre-computed efficiency score')
     parser.add_argument('--params', type=int, default=None, help='Model parameter count')
     parser.add_argument('--time', type=float, default=None, help='Inference time in ms')
+    parser.add_argument('--cliff-acc', type=float, default=None, help='MMP-OOD cliff accuracy')
     parser.add_argument('--participant', type=str, default=None, help='Override participant name')
     
     args = parser.parse_args()
@@ -283,6 +296,7 @@ def main():
     efficiency = args.efficiency
     params = args.params
     time_ms = args.time
+    cliff_acc = args.cliff_acc
     
     if efficiency is None and params and time_ms:
         efficiency = compute_efficiency_score(score, time_ms, params)
@@ -315,6 +329,8 @@ def main():
                 entries[existing_idx]['params'] = params
             if time_ms is not None:
                 entries[existing_idx]['time_ms'] = time_ms
+            if cliff_acc is not None:
+                entries[existing_idx]['cliff_accuracy'] = cliff_acc
         else:
             print(f"Keeping existing score: {old_score:.4f} (new score: {score:.4f})")
             # Still update efficiency if not set and now provided
@@ -322,6 +338,8 @@ def main():
                 entries[existing_idx]['efficiency'] = efficiency
                 entries[existing_idx]['params'] = params
                 entries[existing_idx]['time_ms'] = time_ms
+            if entries[existing_idx].get('cliff_accuracy') is None and cliff_acc is not None:
+                entries[existing_idx]['cliff_accuracy'] = cliff_acc
     else:
         # Add new entry
         print(f"Adding new entry for {participant}")
@@ -331,6 +349,7 @@ def main():
             'efficiency': efficiency,
             'params': params,
             'time_ms': time_ms,
+            'cliff_accuracy': cliff_acc,
             'date': current_date
         })
     

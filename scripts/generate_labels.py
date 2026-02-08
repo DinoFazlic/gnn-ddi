@@ -17,6 +17,7 @@ import os
 import sys
 import argparse
 from pathlib import Path
+from typing import Optional
 import pandas as pd
 import torch
 import zipfile
@@ -46,7 +47,7 @@ def compute_file_hash(filepath: str) -> str:
 
 def create_labels_package(
     output_dir: str,
-    recipient_name: str = None,
+    recipient_name: Optional[str] = None,
     include_train: bool = False,
     create_zip: bool = True
 ) -> dict:
@@ -86,7 +87,7 @@ def create_labels_package(
     # Generate TEST labels
     print("\n📋 Generating test labels...")
     test_idx = split_idx['test'].tolist()
-    test_labels = [dataset[i].y.item() for i in test_idx]
+    test_labels = [dataset[i].y.item() for i in test_idx]  # type: ignore[union-attr]
     test_df = pd.DataFrame({'id': test_idx, 'target': test_labels})
     
     test_path = os.path.join(output_dir, 'test_labels.csv')
@@ -106,7 +107,7 @@ def create_labels_package(
     # Generate VALIDATION labels
     print("\n📋 Generating validation labels...")
     valid_idx = split_idx['valid'].tolist()
-    valid_labels = [dataset[i].y.item() for i in valid_idx]
+    valid_labels = [dataset[i].y.item() for i in valid_idx]  # type: ignore[union-attr]
     valid_df = pd.DataFrame({'id': valid_idx, 'target': valid_labels})
     
     valid_path = os.path.join(output_dir, 'valid_labels.csv')
@@ -127,7 +128,7 @@ def create_labels_package(
     if include_train:
         print("\n📋 Generating train labels (for reference)...")
         train_idx = split_idx['train'].tolist()
-        train_labels = [dataset[i].y.item() for i in train_idx]
+        train_labels = [dataset[i].y.item() for i in train_idx]  # type: ignore[union-attr]
         train_df = pd.DataFrame({'id': train_idx, 'target': train_labels})
         
         train_path = os.path.join(output_dir, 'train_labels.csv')
