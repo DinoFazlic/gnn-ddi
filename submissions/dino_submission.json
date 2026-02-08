@@ -1,0 +1,16 @@
+{
+  "model_name": "GIN-MLP",
+  "architecture": "Graph Isomorphism Network with MLP aggregation",
+  "description": "GIN model leveraging Weisfeiler-Lehman graph isomorphism test for powerful molecular representation learning",
+  "parameters": 98000,
+  "hidden_dim": 64,
+  "num_layers": 4,
+  "mlp_layers": 2,
+  "dropout": 0.4,
+  "learning_rate": 0.0005,
+  "epochs_trained": 200,
+  "inference_time_ms": 3.8,
+  "framework": "PyTorch Geometric",
+  "author": "Dino",
+  "notes": "GIN with sum aggregation - theoretically most expressive GNN architecture for distinguishing molecular graphs"
+}

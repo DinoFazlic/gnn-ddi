@@ -5,3 +5,5 @@ rank,team,macro_f1,efficiency,params,time_ms,cliff_accuracy,submission_type,subm
 4,Baseline-GIN,0.6103,,,,,,2026-01-07
 5,Baseline-GraphSAGE,0.5835,,,,,,2026-01-07
 6,muuki2,0.5048,,,,,human,2026-01-07
+7,ImEldin,0.5046,,,,,human,2026-01-15
+8,DinoFazlic,0.5003,,,,,human,2026-01-15

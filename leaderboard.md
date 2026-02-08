@@ -16,4 +16,3 @@
 
 <!-- This file is kept for backward-compatibility links. -->
 <!-- Do NOT edit manually — run render_leaderboard.py instead. -->
-

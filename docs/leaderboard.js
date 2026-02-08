@@ -80,6 +80,28 @@ const LEADERBOARD_DATA = [
     "cliff_accuracy": null,
     "submission_type": "human",
     "submitted_at": "2026-01-07"
+  },
+  {
+    "rank": 7,
+    "team": "ImEldin",
+    "macro_f1": 0.5046,
+    "efficiency": null,
+    "params": null,
+    "time_ms": null,
+    "cliff_accuracy": null,
+    "submission_type": "human",
+    "submitted_at": "2026-01-15"
+  },
+  {
+    "rank": 8,
+    "team": "DinoFazlic",
+    "macro_f1": 0.5003,
+    "efficiency": null,
+    "params": null,
+    "time_ms": null,
+    "cliff_accuracy": null,
+    "submission_type": "human",
+    "submitted_at": "2026-01-15"
   }
 ];
 // --- LEADERBOARD_DATA_END ---
