@@ -73,6 +73,41 @@ The dataset uses a **scaffold split** based on molecular substructures, ensuring
 
 The dataset is **imbalanced** with approximately 30% positive class (active inhibitors). This makes the task non-trivial — a naive classifier predicting all zeros would achieve ~70% accuracy but poor F1.
 
+### Graph Specification (Adjacency Matrix A & Node Features X)
+
+All molecular graphs are explicitly provided as dense matrices in `data/graphs/`:
+
+| File | Molecules | Contents |
+|------|-----------|----------|
+| `data/graphs/train_graphs.npz` | 1,210 | A, X, y for training |
+| `data/graphs/valid_graphs.npz` | 151 | A, X, y for validation |
+| `data/graphs/test_graphs.npz` | 152 | A, X only (labels hidden) |
+
+For each molecule index `i`:
+- **Adjacency matrix**: $A_i \in \{0,1\}^{n \times n}$ — symmetric, undirected molecular graph
+- **Node feature matrix**: $X_i \in \mathbb{R}^{n \times 9}$ — atom-level features (see above)
+
+where $n$ = number of atoms in molecule $i$.
+
+```python
+import numpy as np
+
+# Load training graphs
+data = np.load('data/graphs/train_graphs.npz', allow_pickle=False)
+
+# Get molecule indices
+indices = data['indices']  # array of molecule IDs
+
+# Load adjacency matrix A and node features X for molecule 2
+A = data['adj_2']   # shape (n, n), binary adjacency matrix
+X = data['x_2']     # shape (n, 9), node feature matrix
+y = data['y_2']     # label: 0 or 1
+
+print(f"Molecule 2: {A.shape[0]} atoms, label = {y[0]}")
+```
+
+The same graph data is also accessible via the OGB API (`data.edge_index`, `data.x`). See `data/graphs/README_graphs.md` for full documentation.
+
 ---
 
 ## Evaluation Metric
@@ -200,28 +235,57 @@ id,y_pred
 - `y_pred`: Your binary prediction (0 or 1)
   - *Legacy column name* `target` is still accepted but deprecated
 
-### Step 2: Submit via Pull Request
+### Step 2: Encrypt Your Submission
+
+All submissions must be encrypted using the competition's RSA public key. This ensures **submission privacy** — your predictions are unreadable without our private key.
+
+```bash
+# Encrypt your predictions
+python encryption/encrypt.py \
+    submissions/inbox/my_team/run_01/predictions.csv \
+    encryption/public_key.pem \
+    submissions/inbox/my_team/run_01/predictions.enc
+```
+
+### Step 3: Submit via Pull Request
 
 1. **Fork** this repository
-2. Add your submission to `submissions/inbox/<your_team>/<run_id>/`:
+2. Add your encrypted submission to `submissions/inbox/<your_team>/<run_id>/`:
    ```
-   submissions/inbox/alice/run_01/predictions.csv   # required
-   submissions/inbox/alice/run_01/metadata.json      # optional
+   submissions/inbox/alice/run_01/predictions.enc    # required (encrypted)
+   submissions/inbox/alice/run_01/metadata.json       # optional
    ```
-3. Create a **Pull Request** to the main repository
+3. Create a **Pull Request** to the main repository:
+   ```bash
+   git add submissions/inbox/my_team/run_01/predictions.enc
+   git commit -m "Submission: My Team Name"
+   git push origin my-branch-name
+   ```
 
-> **Legacy format** (flat `submissions/your_username.csv`) is still accepted for backward compatibility.
+> **Legacy format** (flat `submissions/your_username.csv`) is still accepted for backward compatibility during the transition period.
+
+### How the Security System Works
+
+1. **Encryption (Your Side — Public)**: You encrypt your CSV predictions with our RSA public key (`encryption/public_key.pem`). The resulting `.enc` file is completely unreadable without our private key.
+
+2. **Submission (Your Side — Public)**: You submit the encrypted `.enc` file via Pull Request. Even though the file is in the public repository, nobody can read your predictions.
+
+3. **Automated Decryption (CI — Private)**: GitHub Actions decrypts your submission using the private key stored in GitHub Secrets. The private key is never exposed in the repository or logs.
+
+4. **Scoring & Leaderboard Update (Automated)**: The decrypted predictions are compared against hidden test labels, scores are computed, and the leaderboard is updated automatically (2–5 minutes after submission).
 
 ### Automated Evaluation
 
 When you open a Pull Request, the CI system automatically:
 
-1. **Validates** your submission format (`competition/validate_submission.py`)
-2. **Evaluates** against hidden test labels (`competition/evaluate.py`)
-3. **Comments** on your PR with your Macro F1 score
-4. **Updates** the [leaderboard](leaderboard/leaderboard.md) and [interactive board](https://muuki2.github.io/gnn-ddi/leaderboard.html)
+1. **Decrypts** your encrypted submission (using the private key stored in GitHub Secrets)
+2. **Validates** your submission format (`competition/validate_submission.py`)
+3. **Evaluates** against hidden test labels (`competition/evaluate.py`)
+4. **Comments** on your PR with your Macro F1 score
+5. **Updates** the [leaderboard](leaderboard/leaderboard.md) and [interactive board](https://muuki2.github.io/gnn-ddi/leaderboard.html)
 
 Test labels are **never committed** to the repository — they are injected by CI via GitHub Secrets.
+Private submissions are **never visible** — only final scores and ranks appear on the public leaderboard.
 
 ### Optional: Efficiency Metadata
 
@@ -257,8 +321,9 @@ submissions/
 └── inbox/
     └── your_team/
         └── run_01/
-            ├── predictions.csv       # Required (152 predictions: id, y_pred)
-            └── metadata.json         # Optional (efficiency + model info)
+            ├── predictions.enc        # Required (encrypted predictions)
+            ├── predictions.csv        # DO NOT submit unencrypted (legacy only)
+            └── metadata.json          # Optional (efficiency + model info)
 ```
 
 ---
@@ -494,16 +559,25 @@ gnn-ddi/
 │   ├── metrics.py              # Metric computation (Macro-F1, Efficiency)
 │   ├── validate_submission.py  # Submission format validation
 │   └── render_leaderboard.py   # Generate leaderboard.md + docs JS
+├── encryption/                 # 🔐 Submission encryption system
+│   ├── encrypt.py              # Encrypt predictions (participant-facing)
+│   ├── decrypt.py              # Decrypt submissions (CI only)
+│   └── public_key.pem          # RSA public key (commit to repo)
 ├── data/
 │   ├── public/                 # 📂 Public data (accessible to participants)
 │   │   ├── train.csv           # Training molecule indices
 │   │   ├── valid.csv           # Validation molecule indices
 │   │   └── test.csv            # Test molecule indices (labels hidden)
+│   ├── graphs/                 # 📐 Explicit graph matrices (A and X)
+│   │   ├── train_graphs.npz    # Adjacency & features for training molecules
+│   │   ├── valid_graphs.npz    # Adjacency & features for validation molecules
+│   │   ├── test_graphs.npz     # Adjacency & features for test molecules
+│   │   └── README_graphs.md    # Format documentation
 │   ├── mmp_split/              # MMP-OOD activity-cliff split
 │   └── ogb/                    # OGB dataset (auto-downloaded)
 ├── submissions/
 │   └── inbox/                  # 📥 Submit here: inbox/<team>/<run_id>/
-│       └── sample/run_01/      #     predictions.csv + metadata.json
+│       └── sample/run_01/      #     predictions.enc + metadata.json
 ├── leaderboard/
 │   ├── leaderboard.csv         # 📊 Authoritative leaderboard data
 │   └── leaderboard.md          # Auto-generated Markdown (do not edit)
@@ -547,6 +621,15 @@ Test and validation labels are **never committed** to this repository.  During C
 1. **GitHub Secret** `TEST_LABELS_CSV` (preferred — base64-encoded CSV), or
 2. **Private repository** `gnn-ddi-private` (fallback — cloned with `PRIVATE_REPO_TOKEN`)
 
+### Submission Privacy
+
+Participant predictions are **encrypted with RSA** before submission. The workflow:
+1. Participants encrypt their CSV with the public key (`encryption/public_key.pem`)
+2. The encrypted `.enc` file is submitted via Pull Request
+3. GitHub Actions decrypts using the private key stored in GitHub Secret `RSA_PRIVATE_KEY`
+4. The private key is never exposed in the repository, logs, or PR comments
+5. Only final scores and ranks appear on the public leaderboard
+
 This ensures fair, tamper-proof evaluation with transparent scoring via automated PR comments.
 
 ---
@@ -559,6 +642,10 @@ This ensures fair, tamper-proof evaluation with transparent scoring via automate
 4. **One submission per PR**: Each pull request should contain exactly one predictions file
 5. **Code sharing encouraged**: You may share code and ideas, but submit individually
 6. **Fair play**: Do not attempt to access test labels or exploit the evaluation system
+7. **Submission privacy**: All submissions must be encrypted using the provided RSA public key. Only final scores and ranks appear on the public leaderboard — private submissions must not be visible
+8. **LLM usage restriction**: Large Language Models must not be used to fully design the competition, including dataset creation, task definition, or evaluation logic. This competition's dataset (OGB MolBACE) was created by the academic community, and the evaluation logic was designed by the organizer independently
+9. **Computational affordability**: Full model training must not exceed **3 hours on CPU**. The provided dataset (1,210 training molecules, ~30 atoms each) and baseline models (~40K–54K parameters) train in minutes on CPU. Participants should keep model complexity within this budget
+10. **Kaggle-style ranking**: Tied scores share the same rank on the leaderboard (min method). The next rank after a tie skips accordingly
 
 ---
 

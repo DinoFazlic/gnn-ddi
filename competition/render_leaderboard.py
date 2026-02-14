@@ -72,10 +72,23 @@ def save_leaderboard_csv(path: Path, rows: List[Dict[str, Any]]) -> None:
 
 
 def _sort_and_rank(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """Sort by macro_f1 descending and assign rank."""
+    """Sort by macro_f1 descending and assign Kaggle-style tied ranks.
+
+    Teams with identical macro_f1 share the same rank (min method).
+    The next rank after a tie skips accordingly.
+    Example: 1, 2, 2, 4 (not 1, 2, 2, 3).
+    """
     rows.sort(key=lambda r: float(r.get("macro_f1") or 0), reverse=True)
-    for i, r in enumerate(rows, 1):
-        r["rank"] = i
+    for i, r in enumerate(rows):
+        if i == 0:
+            r["rank"] = 1
+        else:
+            prev_f1 = float(rows[i - 1].get("macro_f1") or 0)
+            curr_f1 = float(r.get("macro_f1") or 0)
+            if curr_f1 == prev_f1:
+                r["rank"] = rows[i - 1]["rank"]
+            else:
+                r["rank"] = i + 1  # 1-based position (skips tied slots)
     return rows
 
 

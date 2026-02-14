@@ -106,6 +106,9 @@ temp_private_data/
 _results.json
 scoring_output.txt
 
+# RSA private key (NEVER commit — add to GitHub Secrets as RSA_PRIVATE_KEY)
+encryption/private_key.pem
+
 # Temporary files
 *.tmp
 *.temp

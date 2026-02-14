@@ -3,9 +3,11 @@ name: Evaluate Submission
 on:
   pull_request_target:
     paths:
-      # New inbox-based layout
+      # Encrypted submissions (recommended)
+      - 'submissions/inbox/**/*.enc'
+      - 'submissions/*.enc'
+      # Legacy plaintext CSV (backward compatibility)
       - 'submissions/inbox/**/*.csv'
-      # Legacy flat layout (backward compatibility)
       - 'submissions/*.csv'
     types: [opened, synchronize, reopened]
 
@@ -80,25 +82,72 @@ jobs:
       - name: Locate submission
         id: find_submission
         run: |
-          # Prefer new inbox layout, fall back to flat
+          # Look for encrypted (.enc) first, then plaintext (.csv)
           SUBMISSION=$(git diff --name-only main...pr-branch \
-            | grep -E 'submissions/(inbox/.+/predictions\.csv|[^/]+\.csv)' \
+            | grep -E 'submissions/(inbox/.+\.(enc|csv)|[^/]+\.(enc|csv))' \
             | head -n 1)
           if [ -z "$SUBMISSION" ]; then
-            echo "❌ No CSV submission found in PR"
+            echo "❌ No submission found in PR (expected .enc or .csv)"
             exit 1
           fi
           echo "submission_file=$SUBMISSION" >> $GITHUB_OUTPUT
           echo "Found submission: $SUBMISSION"
 
+          # Determine if encrypted
+          if echo "$SUBMISSION" | grep -qE '\.enc$'; then
+            echo "encrypted=true" >> $GITHUB_OUTPUT
+          else
+            echo "encrypted=false" >> $GITHUB_OUTPUT
+          fi
+
           # Derive team name from path
           if echo "$SUBMISSION" | grep -q 'inbox/'; then
             TEAM=$(echo "$SUBMISSION" | sed -E 's|submissions/inbox/([^/]+)/.*|\1|')
           else
-            TEAM=$(basename "$SUBMISSION" .csv)
+            TEAM=$(basename "$SUBMISSION" | sed -E 's/\.(enc|csv)$//')
           fi
           echo "team=$TEAM" >> $GITHUB_OUTPUT
           echo "Team: $TEAM"
+
+      # ----------------------------------------------------------
+      # 4b. Decrypt encrypted submissions
+      # ----------------------------------------------------------
+      - name: Decrypt submission
+        if: steps.find_submission.outputs.encrypted == 'true'
+        env:
+          RSA_PRIVATE_KEY: ${{ secrets.RSA_PRIVATE_KEY }}
+        run: |
+          if [ -z "$RSA_PRIVATE_KEY" ]; then
+            echo "❌ RSA_PRIVATE_KEY secret is not set — cannot decrypt submission."
+            exit 1
+          fi
+          # Write private key to temporary file
+          echo "$RSA_PRIVATE_KEY" > /tmp/private_key.pem
+          chmod 600 /tmp/private_key.pem
+
+          # Decrypt
+          ENC_FILE="${{ steps.find_submission.outputs.submission_file }}"
+          CSV_FILE="$(echo "$ENC_FILE" | sed 's/\.enc$/.csv/')"
+          python encryption/decrypt.py "$ENC_FILE" /tmp/private_key.pem "$CSV_FILE"
+
+          # Clean up private key immediately
+          rm -f /tmp/private_key.pem
+
+          # Update submission_file to point to decrypted CSV
+          echo "submission_file=$CSV_FILE" >> $GITHUB_OUTPUT
+          echo "✅ Decrypted → $CSV_FILE"
+
+      - name: Resolve submission path
+        id: resolved_submission
+        run: |
+          if [ "${{ steps.find_submission.outputs.encrypted }}" = "true" ]; then
+            # Use the decrypted CSV path
+            ENC_FILE="${{ steps.find_submission.outputs.submission_file }}"
+            CSV_FILE="$(echo "$ENC_FILE" | sed 's/\.enc$/.csv/')"
+            echo "submission_file=$CSV_FILE" >> $GITHUB_OUTPUT
+          else
+            echo "submission_file=${{ steps.find_submission.outputs.submission_file }}" >> $GITHUB_OUTPUT
+          fi
 
       # ----------------------------------------------------------
       # 5. Check one-submission-per-team limit
@@ -127,7 +176,7 @@ jobs:
       - name: Validate submission
         run: |
           python -m competition.validate_submission \
-            "${{ steps.find_submission.outputs.submission_file }}" \
+            "${{ steps.resolved_submission.outputs.submission_file }}" \
             data/public/test.csv
 
       # ----------------------------------------------------------
@@ -137,7 +186,7 @@ jobs:
         id: score
         run: |
           python -m competition.evaluate \
-            "${{ steps.find_submission.outputs.submission_file }}" \
+            "${{ steps.resolved_submission.outputs.submission_file }}" \
             --labels data/test_labels.csv \
             --test-ids data/public/test.csv \
             --output-json _results.json \
@@ -157,7 +206,7 @@ jobs:
           echo "cliff_acc=$CLIFF" >> $GITHUB_OUTPUT
 
           # Extract submission_type from metadata.json (if present)
-          SUB_DIR=$(dirname "${{ steps.find_submission.outputs.submission_file }}")
+          SUB_DIR=$(dirname "${{ steps.resolved_submission.outputs.submission_file }}")
           META_FILE="$SUB_DIR/metadata.json"
           if [ -f "$META_FILE" ]; then
             STYPE=$(python -c "import json; m=json.load(open('$META_FILE')); print(m.get('submission_type',''))" 2>/dev/null || echo "")

@@ -78,3 +78,8 @@ leaderboard:
     - "submitted_at"
   sort_by: "macro_f1"
   sort_order: "descending"
+  ranking_method: "min"  # Kaggle-style: tied scores share the same rank
+
+constraints:
+  max_training_time_hours_cpu: 3    # full training must not exceed 3h on CPU
+  computational_target: "CPU"       # models must be trainable on CPU
