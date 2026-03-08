@@ -14,96 +14,7 @@
  */
 
 // --- LEADERBOARD_DATA_START ---
-const LEADERBOARD_DATA = [
-  {
-    "rank": 1,
-    "team": "Baseline-Spectral",
-    "macro_f1": 0.7215,
-    "efficiency": 0.636,
-    "params": 40400,
-    "time_ms": 4.4,
-    "cliff_accuracy": null,
-    "submission_type": "baseline",
-    "submitted_at": "2026-01-15"
-  },
-  {
-    "rank": 2,
-    "team": "Baseline-DMPNN",
-    "macro_f1": 0.6674,
-    "efficiency": 0.0833,
-    "params": 53600,
-    "time_ms": 62.4,
-    "cliff_accuracy": null,
-    "submission_type": "baseline",
-    "submitted_at": "2026-01-15"
-  },
-  {
-    "rank": 3,
-    "team": "Baseline-GCN",
-    "macro_f1": 0.6153,
-    "efficiency": null,
-    "params": null,
-    "time_ms": null,
-    "cliff_accuracy": null,
-    "submission_type": null,
-    "submitted_at": "2026-01-07"
-  },
-  {
-    "rank": 4,
-    "team": "Baseline-GIN",
-    "macro_f1": 0.6103,
-    "efficiency": null,
-    "params": null,
-    "time_ms": null,
-    "cliff_accuracy": null,
-    "submission_type": null,
-    "submitted_at": "2026-01-07"
-  },
-  {
-    "rank": 5,
-    "team": "Baseline-GraphSAGE",
-    "macro_f1": 0.5835,
-    "efficiency": null,
-    "params": null,
-    "time_ms": null,
-    "cliff_accuracy": null,
-    "submission_type": null,
-    "submitted_at": "2026-01-07"
-  },
-  {
-    "rank": 6,
-    "team": "muuki2",
-    "macro_f1": 0.5048,
-    "efficiency": null,
-    "params": null,
-    "time_ms": null,
-    "cliff_accuracy": null,
-    "submission_type": "human",
-    "submitted_at": "2026-01-07"
-  },
-  {
-    "rank": 7,
-    "team": "ImEldin",
-    "macro_f1": 0.5046,
-    "efficiency": null,
-    "params": null,
-    "time_ms": null,
-    "cliff_accuracy": null,
-    "submission_type": "human",
-    "submitted_at": "2026-01-15"
-  },
-  {
-    "rank": 8,
-    "team": "DinoFazlic",
-    "macro_f1": 0.5003,
-    "efficiency": null,
-    "params": null,
-    "time_ms": null,
-    "cliff_accuracy": null,
-    "submission_type": "human",
-    "submitted_at": "2026-01-15"
-  }
-];
+const LEADERBOARD_DATA = [];
 // --- LEADERBOARD_DATA_END ---
 
 /* ----------------------------------------------------------------
@@ -158,9 +69,21 @@ function applyColumnVisibility(hidden) {
 
 function renderTable(data) {
   const tbody = document.getElementById("leaderboard-body");
+  const table = document.getElementById("leaderboard-table");
+  const emptyMsg = document.getElementById("empty-message");
   const hidden = getHiddenCols();
   applyColumnVisibility(hidden);
   tbody.innerHTML = "";
+
+  if (data.length === 0) {
+    table.style.display = "none";
+    emptyMsg.style.display = "block";
+    document.getElementById("row-count").textContent = "";
+    return;
+  }
+
+  table.style.display = "table";
+  emptyMsg.style.display = "none";
 
   data.forEach((row, idx) => {
     const rank = idx + 1;
