@@ -6,7 +6,7 @@
 
 *A secure, Kaggle-style GNN competition for molecular property prediction*
 
-[![Leaderboard](https://img.shields.io/badge/Leaderboard-Live-blue)](leaderboard.md)
+[![Leaderboard](https://img.shields.io/badge/Leaderboard-Live-blue)](https://muuki2.github.io/enigma/leaderboard.html)
 [![Dataset](https://img.shields.io/badge/Dataset-OGB_MolBACE-green)](https://ogb.stanford.edu/docs/graphprop/#ogbg-mol)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![CI](https://img.shields.io/badge/CI-Automated_Evaluation-orange)](.github/workflows/evaluate.yml)
@@ -285,7 +285,7 @@ git push origin my-branch && gh pr create   # or open PR on GitHub
 2. **Validate** — `competition/validate_submission.py` checks format
 3. **Score** — `competition/evaluate.py` computes Macro F1 against hidden labels
 4. **Comment** — A bot comments on your PR with the score
-5. **Leaderboard** — [Leaderboard](leaderboard/leaderboard.md) and [interactive board](https://muuki2.github.io/enigma/leaderboard.html) are updated automatically
+5. **Leaderboard** — [View the Live Leaderboard](https://muuki2.github.io/enigma/leaderboard.html) and [interactive board](https://muuki2.github.io/enigma/leaderboard.html) are updated automatically
 
 </details>
 
@@ -316,13 +316,9 @@ submissions/inbox/<team>/<run_id>/
 
 ## Current Leaderboard
 
-| Rank | Team | Macro-F1 | Efficiency | Params |
-|------|------|----------|------------|--------|
-| 🥇 1 | Baseline-Spectral | 0.7215 | 0.6360 | 40.4K |
-| 🥈 2 | Baseline-DMPNN | 0.6674 | 0.0833 | 53.6K |
-| 🥉 3 | Baseline-GCN | 0.6153 | - | - |
+No submissions yet — be the first! 🚀
 
-[Interactive Leaderboard](https://muuki2.github.io/enigma/leaderboard.html)
+👉 **[View the Live Leaderboard](https://muuki2.github.io/enigma/leaderboard.html)**
 
 ---
 
