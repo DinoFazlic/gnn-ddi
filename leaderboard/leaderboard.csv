@@ -1,9 +1,1 @@
 rank,team,macro_f1,efficiency,params,time_ms,cliff_accuracy,submission_type,submitted_at
-1,Baseline-Spectral,0.7215,0.636,40400,4.4,,baseline,2026-01-15
-2,Baseline-DMPNN,0.6674,0.0833,53600,62.4,,baseline,2026-01-15
-3,Baseline-GCN,0.6153,,,,,,2026-01-07
-4,Baseline-GIN,0.6103,,,,,,2026-01-07
-5,Baseline-GraphSAGE,0.5835,,,,,,2026-01-07
-6,muuki2,0.5048,,,,,human,2026-01-07
-7,ImEldin,0.5046,,,,,human,2026-01-15
-8,DinoFazlic,0.5003,,,,,human,2026-01-15
