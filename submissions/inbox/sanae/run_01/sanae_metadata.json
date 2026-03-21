@@ -1,8 +1,0 @@
-{
-  "team_name": "sanae",
-  "model_name": "GCNModel",
-  "submission_type": "human",
-  "parameters": 69890,
-  "hidden_dim": 256,
-  "num_layers": 2,
-}
