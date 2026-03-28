@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ENIGMA — Leaderboard</title>
+  <link rel="stylesheet" href="leaderboard.css" />
+</head>
+<body>
+  <header>
+    <h1>🏆 ENIGMA Competition</h1>
+    <p class="subtitle">Predict BACE-1 enzyme inhibition using Graph Neural Networks</p>
+  </header>
+
+  <main>
+    <!-- Row 1: Search + Sort -->
+    <section class="controls">
+      <label for="sort-select">Sort by:</label>
+      <select id="sort-select">
+        <option value="macro_f1" selected>Macro F1 ↓</option>
+        <option value="efficiency">Efficiency ↓</option>
+        <option value="cliff_accuracy">Cliff Acc ↓</option>
+        <option value="params_asc">Params ↑</option>
+        <option value="time_ms_asc">Time (ms) ↑</option>
+      </select>
+      <input type="text" id="search-input" placeholder="Search team, model, notes…" />
+    </section>
+
+    <!-- Row 2: Model-type filter + Date range -->
+    <section class="controls">
+      <label for="type-filter">Type:</label>
+      <select id="type-filter">
+        <option value="all" selected>All</option>
+        <option value="human">Human</option>
+        <option value="llm">LLM</option>
+        <option value="human+llm">Human + LLM</option>
+        <option value="baseline">Baseline</option>
+      </select>
+
+      <label for="date-from">From:</label>
+      <input type="date" id="date-from" />
+      <label for="date-to">To:</label>
+      <input type="date" id="date-to" />
+    </section>
+
+    <!-- Row 3: Column toggles -->
+    <section class="controls column-toggles">
+      <span class="toggle-label">Columns:</span>
+      <label><input type="checkbox" data-col="efficiency" checked /> Efficiency</label>
+      <label><input type="checkbox" data-col="params" checked /> Params</label>
+      <label><input type="checkbox" data-col="time_ms" checked /> Time</label>
+      <label><input type="checkbox" data-col="cliff_accuracy" checked /> Cliff Acc</label>
+      <label><input type="checkbox" data-col="submission_type" checked /> Type</label>
+      <label><input type="checkbox" data-col="submitted_at" checked /> Date</label>
+    </section>
+
+    <div id="empty-message" style="display:none; text-align:center; padding:3rem; color:#666;">
+      <p style="font-size:1.2rem; margin-bottom:0.5rem;">🚀 No submissions yet!</p>
+      <p>Be the first to submit and claim the top spot.</p>
+    </div>
+
+    <table id="leaderboard-table">
+      <thead>
+        <tr>
+          <th data-col="rank">Rank</th>
+          <th data-col="team">Team</th>
+          <th data-col="macro_f1">Macro‑F1</th>
+          <th data-col="efficiency">Efficiency</th>
+          <th data-col="params">Params</th>
+          <th data-col="time_ms">Time&nbsp;(ms)</th>
+          <th data-col="cliff_accuracy">Cliff&nbsp;Acc</th>
+          <th data-col="submission_type">Type</th>
+          <th data-col="submitted_at">Submitted</th>
+        </tr>
+      </thead>
+      <tbody id="leaderboard-body">
+        <!-- populated by leaderboard.js -->
+      </tbody>
+    </table>
+
+    <p id="row-count" class="meta"></p>
+  </main>
+
+  <footer>
+    <p>
+      <a href="https://github.com/muuki2/enigma">Repository</a> ·
+      Primary metric: <strong>Macro F1</strong> ·
+      Efficiency = F1² / (log₁₀(t<sub>ms</sub>) × log₁₀(params))
+    </p>
+  </footer>
+
+  <script src="leaderboard.js"></script>
+</body>
+</html>

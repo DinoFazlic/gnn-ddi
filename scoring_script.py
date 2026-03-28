@@ -223,6 +223,12 @@ def main():
         default=None,
         help='Path to output JSON file with all metrics'
     )
+    parser.add_argument(
+        '--pairs-csv',
+        type=str,
+        default=None,
+        help='Path to MMP-OOD pairs CSV for pairwise cliff accuracy evaluation'
+    )
     
     args = parser.parse_args()
     
@@ -331,6 +337,30 @@ def main():
     print(f"  Actual 0:  {cm[0][0]:4d}   {cm[0][1]:4d}")
     print(f"  Actual 1:  {cm[1][0]:4d}   {cm[1][1]:4d}")
     
+    # --- MMP-OOD Pairwise Cliff Accuracy (optional) ---
+    cliff_accuracy = None
+    if args.pairs_csv:
+        try:
+            from evaluation.mmp_ood import load_pairs_csv, compute_cliff_accuracy_hard
+            pairs = load_pairs_csv(args.pairs_csv)
+            # Build prediction dict from submission
+            merged = truth_df.merge(submission_df, on='id', suffixes=('_true', '_pred'))
+            pred_dict = dict(zip(merged['id'].values, merged['target_pred'].values))
+            cliff_acc, per_pair = compute_cliff_accuracy_hard(pairs, pred_dict)
+            cliff_accuracy = cliff_acc
+            metrics['cliff_accuracy'] = cliff_accuracy
+            metrics['cliff_pairs_evaluated'] = len(per_pair)
+            metrics['cliff_pairs_correct'] = sum(per_pair)
+            
+            print(f"\n🧬 MMP-OOD Pairwise Cliff Accuracy:")
+            print(f"  - Cliff Accuracy: {cliff_accuracy:.4f}")
+            print(f"  - Pairs evaluated: {len(per_pair)}")
+            print(f"  - Pairs correct:   {sum(per_pair)}")
+        except ImportError:
+            print("\n⚠️  Could not load MMP-OOD module (rdkit not installed?)")
+        except Exception as e:
+            print(f"\n⚠️  MMP-OOD evaluation failed: {e}")
+    
     print("\n" + "="*60)
     
     # Output the main score for GitHub Actions to capture
@@ -342,6 +372,10 @@ def main():
         print(f"EFFICIENCY:{efficiency_score:.6f}")
         print(f"PARAMS:{total_params}")
         print(f"TIME_MS:{inference_time_ms:.2f}")
+    
+    # Output cliff accuracy if computed
+    if cliff_accuracy is not None:
+        print(f"CLIFF_ACC:{cliff_accuracy:.6f}")
     
     # Write output JSON if requested
     if args.output_json:
@@ -358,6 +392,10 @@ def main():
             output_data['efficiency_score'] = efficiency_score
             output_data['inference_time_ms'] = inference_time_ms
             output_data['total_params'] = total_params
+        if cliff_accuracy is not None:
+            output_data['cliff_accuracy'] = cliff_accuracy
+            output_data['cliff_pairs_evaluated'] = metrics.get('cliff_pairs_evaluated', 0)
+            output_data['cliff_pairs_correct'] = metrics.get('cliff_pairs_correct', 0)
         
         with open(args.output_json, 'w') as f:
             json.dump(output_data, f, indent=2)

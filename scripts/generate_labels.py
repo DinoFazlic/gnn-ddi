@@ -17,6 +17,7 @@ import os
 import sys
 import argparse
 from pathlib import Path
+from typing import Optional
 import pandas as pd
 import torch
 import zipfile
@@ -46,7 +47,7 @@ def compute_file_hash(filepath: str) -> str:
 
 def create_labels_package(
     output_dir: str,
-    recipient_name: str = None,
+    recipient_name: Optional[str] = None,
     include_train: bool = False,
     create_zip: bool = True
 ) -> dict:
@@ -86,7 +87,7 @@ def create_labels_package(
     # Generate TEST labels
     print("\n📋 Generating test labels...")
     test_idx = split_idx['test'].tolist()
-    test_labels = [dataset[i].y.item() for i in test_idx]
+    test_labels = [dataset[i].y.item() for i in test_idx]  # type: ignore[union-attr]
     test_df = pd.DataFrame({'id': test_idx, 'target': test_labels})
     
     test_path = os.path.join(output_dir, 'test_labels.csv')
@@ -106,7 +107,7 @@ def create_labels_package(
     # Generate VALIDATION labels
     print("\n📋 Generating validation labels...")
     valid_idx = split_idx['valid'].tolist()
-    valid_labels = [dataset[i].y.item() for i in valid_idx]
+    valid_labels = [dataset[i].y.item() for i in valid_idx]  # type: ignore[union-attr]
     valid_df = pd.DataFrame({'id': valid_idx, 'target': valid_labels})
     
     valid_path = os.path.join(output_dir, 'valid_labels.csv')
@@ -127,7 +128,7 @@ def create_labels_package(
     if include_train:
         print("\n📋 Generating train labels (for reference)...")
         train_idx = split_idx['train'].tolist()
-        train_labels = [dataset[i].y.item() for i in train_idx]
+        train_labels = [dataset[i].y.item() for i in train_idx]  # type: ignore[union-attr]
         train_df = pd.DataFrame({'id': train_idx, 'target': train_labels})
         
         train_path = os.path.join(output_dir, 'train_labels.csv')
@@ -147,7 +148,7 @@ def create_labels_package(
     # Create metadata file
     metadata_path = os.path.join(output_dir, 'labels_metadata.txt')
     with open(metadata_path, 'w') as f:
-        f.write("GNN-DDI Competition - Ground Truth Labels\n")
+        f.write("ENIGMA Competition - Ground Truth Labels\n")
         f.write("=" * 50 + "\n\n")
         f.write(f"Generated: {result['metadata']['generated_at']}\n")
         f.write(f"Recipient: {result['metadata']['recipient']}\n")
@@ -172,7 +173,7 @@ def create_labels_package(
     if create_zip:
         recipient_suffix = f"_{recipient_name}" if recipient_name else ""
         date_suffix = datetime.now().strftime("%Y%m%d")
-        zip_name = f"gnn_ddi_labels{recipient_suffix}_{date_suffix}.zip"
+        zip_name = f"enigma_labels{recipient_suffix}_{date_suffix}.zip"
         zip_path = os.path.join(output_dir, zip_name)
         
         print(f"\n📦 Creating ZIP archive: {zip_name}")
@@ -188,7 +189,7 @@ def create_labels_package(
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Generate ground truth labels for GNN-DDI competition"
+        description="Generate ground truth labels for ENIGMA competition"
     )
     parser.add_argument(
         '--output-dir', '-o',
@@ -228,7 +229,7 @@ def main():
         output_dir = str(script_dir.parent / 'temp_private_data')
     
     print("\n" + "=" * 60)
-    print("  GNN-DDI Label Generator")
+    print("  ENIGMA Label Generator")
     print("=" * 60)
     
     # Generate labels
@@ -267,7 +268,7 @@ def main():
     print("\n" + "=" * 60)
     print("⚠️  IMPORTANT REMINDERS:")
     print("  - test_labels.csv and valid_labels.csv are PRIVATE")
-    print("  - Copy these to your PRIVATE repository (gnn-ddi-private)")
+    print("  - Copy these to your PRIVATE repository (enigma-private)")
     print("  - Do NOT commit these to the public repository")
     print("=" * 60 + "\n")
 

@@ -1,0 +1,92 @@
+# ============================================================
+# ENIGMA — Encrypted Neural Inference on Graphs for Molecular Analysis
+# ============================================================
+# This file is the single source of truth for competition settings.
+# CI workflows, evaluate.py, validate_submission.py, and
+# render_leaderboard.py all read from here.
+
+competition:
+  name: "ENIGMA — Encrypted Neural Inference on Graphs for Molecular Analysis"
+  short_name: "enigma"
+  description: >
+    Predict BACE-1 enzyme inhibition using Graph Neural Networks
+    on the OGB MolBACE dataset (scaffold split). Unlike the standard
+    OGB MolBACE benchmark, ENIGMA introduces RSA-2048 encrypted
+    submissions, multi-dimensional evaluation (Macro F1, Efficiency
+    Score, and MMP-OOD activity-cliff accuracy), a fully automated
+    GitHub Actions CI scoring pipeline, explicit dense graph matrices
+    (A, X), adversarial robustness testing, uncertainty quantification,
+    and a strict one-submission-per-team rule to prevent leaderboard
+    probing.
+  version: "1.0"
+  organiser: "BASIRA Lab"
+
+dataset:
+  name: "OGB MolBACE"
+  source: "https://ogb.stanford.edu/docs/graphprop/#ogbg-mol"
+  task: "binary_classification"
+  num_classes: 2
+  split_strategy: "scaffold"
+  counts:
+    train: 1210
+    valid: 151
+    test: 152
+
+metrics:
+  primary:
+    name: "macro_f1"
+    display_name: "Macro F1"
+    higher_is_better: true
+  secondary:
+    - name: "efficiency"
+      display_name: "Efficiency"
+      higher_is_better: true
+      formula: "F1² / (log₁₀(time_ms) × log₁₀(params))"
+    - name: "cliff_accuracy"
+      display_name: "Cliff Acc"
+      higher_is_better: true
+      description: "MMP-OOD pairwise activity-cliff accuracy"
+
+submission:
+  file_name: "predictions.csv"
+  metadata_file: "metadata.json"
+  path_pattern: "submissions/inbox/{team_name}/{run_id}/"
+  columns:
+    - name: "id"
+      dtype: "int"
+      description: "Molecule ID matching data/public/test.csv"
+    - name: "y_pred"
+      dtype: "int"
+      allowed_values: [0, 1]
+      description: "Predicted binary label"
+  legacy_pred_column: "target"          # accept old column name with warning
+  max_submissions_per_team: 1           # each team may submit only once
+  submission_types: ["human", "llm", "human+llm", "baseline"]  # metadata.submission_type
+
+labels:
+  # Primary: inject via GitHub Secret (base64-encoded CSV)
+  secret_name: "TEST_LABELS_CSV"
+  # Fallback: clone private repo
+  private_repo: "muuki2/enigma-private"
+  private_repo_token_secret: "PRIVATE_REPO_TOKEN"
+
+leaderboard:
+  csv_path: "leaderboard/leaderboard.csv"
+  md_path: "leaderboard/leaderboard.md"
+  columns:
+    - "rank"
+    - "team"
+    - "macro_f1"
+    - "efficiency"
+    - "params"
+    - "time_ms"
+    - "cliff_accuracy"
+    - "submission_type"
+    - "submitted_at"
+  sort_by: "macro_f1"
+  sort_order: "descending"
+  ranking_method: "min"  # Kaggle-style: tied scores share the same rank
+
+constraints:
+  max_training_time_hours_cpu: 3    # full training must not exceed 3h on CPU
+  computational_target: "CPU"       # models must be trainable on CPU

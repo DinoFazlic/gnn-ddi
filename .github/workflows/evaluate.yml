@@ -3,6 +3,11 @@ name: Evaluate Submission
 on:
   pull_request_target:
     paths:
+      # Encrypted submissions (recommended)
+      - 'submissions/inbox/**/*.enc'
+      - 'submissions/*.enc'
+      # Legacy plaintext CSV (backward compatibility)
+      - 'submissions/inbox/**/*.csv'
       - 'submissions/*.csv'
     types: [opened, synchronize, reopened]
 
@@ -14,145 +19,296 @@ permissions:
 jobs:
   evaluate:
     runs-on: ubuntu-latest
-    
+
     steps:
+      # ----------------------------------------------------------
+      # 1. Checkout main (safe base for pull_request_target)
+      # ----------------------------------------------------------
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           ref: main
           fetch-depth: 0
-      
+
       - name: Fetch PR changes
         run: |
           git fetch origin pull/${{ github.event.pull_request.number }}/head:pr-branch
           git checkout pr-branch -- submissions/ || echo "No submission changes in PR"
-      
+
+      # ----------------------------------------------------------
+      # 2. Python environment
+      # ----------------------------------------------------------
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
           cache: 'pip'
-      
+
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install pandas scikit-learn numpy
-      
-      - name: Fetch private validation data
+          pip install -r requirements.txt
+
+      # ----------------------------------------------------------
+      # 3. Resolve ground-truth labels
+      #    Priority: GitHub Secret → private repo fallback
+      # ----------------------------------------------------------
+      - name: Inject labels from secret
+        if: ${{ env.TEST_LABELS_CSV != '' }}
         env:
+          TEST_LABELS_CSV: ${{ secrets.TEST_LABELS_CSV }}
+        run: |
+          echo "$TEST_LABELS_CSV" | base64 --decode > data/test_labels.csv
+          echo "✅ Labels injected from GitHub Secret"
+
+      - name: Fallback — fetch labels from private repo
+        if: ${{ env.TEST_LABELS_CSV == '' }}
+        env:
+          TEST_LABELS_CSV: ${{ secrets.TEST_LABELS_CSV }}
           PRIVATE_REPO_TOKEN: ${{ secrets.PRIVATE_REPO_TOKEN }}
         run: |
-          # Clone the private repository containing ground truth labels
-          git clone --depth 1 https://${PRIVATE_REPO_TOKEN}@github.com/muuki2/gnn-ddi-private.git private_data
-          
-          # Copy the validation/test labels to the data directory
+          if [ -z "$PRIVATE_REPO_TOKEN" ]; then
+            echo "❌ No labels secret and no PRIVATE_REPO_TOKEN — cannot score."
+            exit 1
+          fi
+          git clone --depth 1 https://${PRIVATE_REPO_TOKEN}@github.com/muuki2/enigma-private.git private_data
           cp private_data/test_labels.csv data/test_labels.csv
-          cp private_data/valid_labels.csv data/valid_labels.csv
-          
-          echo "Ground truth files prepared from private repository"
-          
-          # Clean up
           rm -rf private_data
-      
-      - name: Find submission file
+          echo "✅ Labels fetched from private repo"
+
+      # ----------------------------------------------------------
+      # 4. Find the submission file
+      # ----------------------------------------------------------
+      - name: Locate submission
         id: find_submission
         run: |
-          # Get the list of changed files in the PR
-          CHANGED_FILES=$(git diff --name-only main...pr-branch | grep 'submissions/.*\.csv' | head -n 1)
-          if [ -z "$CHANGED_FILES" ]; then
-            echo "No CSV submission found in PR"
+          # Look for encrypted (.enc) first, then plaintext (.csv)
+          SUBMISSION=$(git diff --name-only main...pr-branch \
+            | grep -E 'submissions/(inbox/.+\.(enc|csv)|[^/]+\.(enc|csv))' \
+            | head -n 1)
+          if [ -z "$SUBMISSION" ]; then
+            echo "❌ No submission found in PR (expected .enc or .csv)"
             exit 1
           fi
-          echo "submission_file=$CHANGED_FILES" >> $GITHUB_OUTPUT
-          echo "Found submission: $CHANGED_FILES"
-      
+          echo "submission_file=$SUBMISSION" >> $GITHUB_OUTPUT
+          echo "Found submission: $SUBMISSION"
+
+          # Determine if encrypted
+          if echo "$SUBMISSION" | grep -qE '\.enc$'; then
+            echo "encrypted=true" >> $GITHUB_OUTPUT
+          else
+            echo "encrypted=false" >> $GITHUB_OUTPUT
+          fi
+
+          # Derive team name from path
+          if echo "$SUBMISSION" | grep -q 'inbox/'; then
+            TEAM=$(echo "$SUBMISSION" | sed -E 's|submissions/inbox/([^/]+)/.*|\1|')
+          else
+            TEAM=$(basename "$SUBMISSION" | sed -E 's/\.(enc|csv)$//')
+          fi
+          echo "team=$TEAM" >> $GITHUB_OUTPUT
+          echo "Team: $TEAM"
+
+      # ----------------------------------------------------------
+      # 4b. Decrypt encrypted submissions
+      # ----------------------------------------------------------
+      - name: Decrypt submission
+        if: steps.find_submission.outputs.encrypted == 'true'
+        env:
+          RSA_PRIVATE_KEY: ${{ secrets.RSA_PRIVATE_KEY }}
+        run: |
+          if [ -z "$RSA_PRIVATE_KEY" ]; then
+            echo "❌ RSA_PRIVATE_KEY secret is not set — cannot decrypt submission."
+            exit 1
+          fi
+          # Write private key to temporary file
+          echo "$RSA_PRIVATE_KEY" > /tmp/private_key.pem
+          chmod 600 /tmp/private_key.pem
+
+          # Decrypt
+          ENC_FILE="${{ steps.find_submission.outputs.submission_file }}"
+          CSV_FILE="$(echo "$ENC_FILE" | sed 's/\.enc$/.csv/')"
+          python encryption/decrypt.py "$ENC_FILE" /tmp/private_key.pem "$CSV_FILE"
+
+          # Clean up private key immediately
+          rm -f /tmp/private_key.pem
+
+          # Update submission_file to point to decrypted CSV
+          echo "submission_file=$CSV_FILE" >> $GITHUB_OUTPUT
+          echo "✅ Decrypted → $CSV_FILE"
+
+      - name: Resolve submission path
+        id: resolved_submission
+        run: |
+          if [ "${{ steps.find_submission.outputs.encrypted }}" = "true" ]; then
+            # Use the decrypted CSV path
+            ENC_FILE="${{ steps.find_submission.outputs.submission_file }}"
+            CSV_FILE="$(echo "$ENC_FILE" | sed 's/\.enc$/.csv/')"
+            echo "submission_file=$CSV_FILE" >> $GITHUB_OUTPUT
+          else
+            echo "submission_file=${{ steps.find_submission.outputs.submission_file }}" >> $GITHUB_OUTPUT
+          fi
+
+      # ----------------------------------------------------------
+      # 5. Check one-submission-per-team limit
+      # ----------------------------------------------------------
+      - name: Enforce one submission per team
+        env:
+          TEAM: ${{ steps.find_submission.outputs.team }}
+        run: |
+          python -c "
+          import sys, pathlib
+          sys.path.insert(0, '.')
+          from competition.render_leaderboard import load_leaderboard_csv
+          rows = load_leaderboard_csv(pathlib.Path('leaderboard/leaderboard.csv'))
+          team = '$TEAM'.lower()
+          existing = [r for r in rows if str(r.get('team','')).lower() == team]
+          if existing:
+              print(f'❌ Team \"{team}\" already has a submission on the leaderboard.')
+              print('   Each team is limited to one submission.')
+              sys.exit(1)
+          print(f'✅ No prior submission for \"{team}\" — proceeding.')
+          "
+
+      # ----------------------------------------------------------
+      # 6. Validate
+      # ----------------------------------------------------------
       - name: Validate submission
         run: |
-          SUBMISSION="${{ steps.find_submission.outputs.submission_file }}"
-          if [ ! -f "$SUBMISSION" ]; then
-            echo "Error: Submission file not found: $SUBMISSION"
-            exit 1
-          fi
-          
-          # Check file format
-          HEADER=$(head -n 1 "$SUBMISSION")
-          if [[ "$HEADER" != *"id"* ]] || [[ "$HEADER" != *"target"* ]]; then
-            echo "Error: Invalid submission format. Must have 'id' and 'target' columns"
-            exit 1
-          fi
-          echo "Submission format is valid"
-      
-      - name: Run scoring script
+          python -m competition.validate_submission \
+            "${{ steps.resolved_submission.outputs.submission_file }}" \
+            data/public/test.csv
+
+      # ----------------------------------------------------------
+      # 7. Score
+      # ----------------------------------------------------------
+      - name: Evaluate submission
         id: score
         run: |
-          python scoring_script.py "${{ steps.find_submission.outputs.submission_file }}" | tee scoring_output.txt
-          SCORE=$(grep "SCORE:" scoring_output.txt | cut -d':' -f2)
+          python -m competition.evaluate \
+            "${{ steps.resolved_submission.outputs.submission_file }}" \
+            --labels data/test_labels.csv \
+            --test-ids data/public/test.csv \
+            --output-json _results.json \
+            | tee scoring_output.txt
+
+          SCORE=$(grep "^SCORE:" scoring_output.txt | cut -d':' -f2)
           echo "score=$SCORE" >> $GITHUB_OUTPUT
-          echo "Computed score: $SCORE"
-      
-      - name: Update leaderboard
+
+          # Capture optional secondary metrics
+          EFF=$(grep "^EFFICIENCY:" scoring_output.txt | cut -d':' -f2 || echo "")
+          PARAMS=$(grep "^PARAMS:" scoring_output.txt | cut -d':' -f2 || echo "")
+          TIME=$(grep "^TIME_MS:" scoring_output.txt | cut -d':' -f2 || echo "")
+          CLIFF=$(grep "^CLIFF_ACC:" scoring_output.txt | cut -d':' -f2 || echo "")
+          echo "efficiency=$EFF" >> $GITHUB_OUTPUT
+          echo "params=$PARAMS" >> $GITHUB_OUTPUT
+          echo "time_ms=$TIME" >> $GITHUB_OUTPUT
+          echo "cliff_acc=$CLIFF" >> $GITHUB_OUTPUT
+
+          # Extract submission_type from metadata.json (if present)
+          SUB_DIR=$(dirname "${{ steps.resolved_submission.outputs.submission_file }}")
+          META_FILE="$SUB_DIR/metadata.json"
+          if [ -f "$META_FILE" ]; then
+            STYPE=$(python -c "import json; m=json.load(open('$META_FILE')); print(m.get('submission_type',''))" 2>/dev/null || echo "")
+          else
+            STYPE=""
+          fi
+          echo "submission_type=$STYPE" >> $GITHUB_OUTPUT
+
+      # ----------------------------------------------------------
+      # 8. Update leaderboard
+      # ----------------------------------------------------------
+      - name: Update leaderboard CSV & render
         env:
-          ACTOR: ${{ github.event.pull_request.user.login }}
+          TEAM: ${{ steps.find_submission.outputs.team }}
+          SCORE: ${{ steps.score.outputs.score }}
+          EFF: ${{ steps.score.outputs.efficiency }}
+          PARAMS: ${{ steps.score.outputs.params }}
+          TIME_MS: ${{ steps.score.outputs.time_ms }}
+          CLIFF: ${{ steps.score.outputs.cliff_acc }}
+          STYPE: ${{ steps.score.outputs.submission_type }}
         run: |
-          python update_leaderboard.py "${{ steps.find_submission.outputs.submission_file }}"
-      
+          python -c "
+          import sys, pathlib
+          sys.path.insert(0, '.')
+          from competition.render_leaderboard import (
+              load_leaderboard_csv, save_leaderboard_csv, upsert_entry,
+              render_markdown, update_docs_js, _sort_and_rank,
+          )
+          import os
+
+          csv_path = pathlib.Path('leaderboard/leaderboard.csv')
+          md_path  = pathlib.Path('leaderboard/leaderboard.md')
+
+          rows = load_leaderboard_csv(csv_path)
+          rows = upsert_entry(
+              rows,
+              team=os.environ['TEAM'],
+              macro_f1=float(os.environ['SCORE']),
+              efficiency=float(os.environ['EFF']) if os.environ.get('EFF') else None,
+              params=int(os.environ['PARAMS']) if os.environ.get('PARAMS') else None,
+              time_ms=float(os.environ['TIME_MS']) if os.environ.get('TIME_MS') else None,
+              cliff_accuracy=float(os.environ['CLIFF']) if os.environ.get('CLIFF') else None,
+              submission_type=os.environ.get('STYPE') or None,
+          )
+          save_leaderboard_csv(csv_path, rows)
+          md_path.write_text(render_markdown(rows))
+          update_docs_js(rows)
+          print(f'Leaderboard updated: {len(rows)} entries')
+          "
+
+      # ----------------------------------------------------------
+      # 9. Commit & push
+      # ----------------------------------------------------------
       - name: Commit leaderboard update
         run: |
           git config --local user.name "GitHub Actions Bot"
           git config --local user.email "actions@github.com"
           git checkout main
-          git add leaderboard.md
+          git add leaderboard/ docs/leaderboard.js
           if git diff --staged --quiet; then
-            echo "No changes to commit"
+            echo "No leaderboard changes to commit"
           else
-            git commit -m "Update leaderboard: ${{ github.event.pull_request.user.login }} - Score: ${{ steps.score.outputs.score }}"
+            git commit -m "🏆 Leaderboard: ${{ steps.find_submission.outputs.team }} — F1=${{ steps.score.outputs.score }}"
             git push origin main
           fi
-      
+
+      # ----------------------------------------------------------
+      # 10. Comment on PR
+      # ----------------------------------------------------------
       - name: Comment on PR
         uses: actions/github-script@v7
         with:
           script: |
             const score = '${{ steps.score.outputs.score }}';
-            const participant = '${{ github.event.pull_request.user.login }}';
-            const submission = '${{ steps.find_submission.outputs.submission_file }}';
-            
+            const team  = '${{ steps.find_submission.outputs.team }}';
+            const sub   = '${{ steps.find_submission.outputs.submission_file }}';
+            const eff   = '${{ steps.score.outputs.efficiency }}';
+            const cliff = '${{ steps.score.outputs.cliff_acc }}';
+
+            let extras = '';
+            if (eff) extras += `| Efficiency | ${parseFloat(eff).toFixed(4)} |\n`;
+            if (cliff) extras += `| Cliff Accuracy | ${parseFloat(cliff).toFixed(4)} |\n`;
+
             const body = `## 🎯 Submission Evaluation Results
-            
-            **Participant:** @${participant}
-            **Submission:** \`${submission}\`
-            
+
+            **Team:** @${team}
+            **File:** \`${sub}\`
+
             ---
-            
-            ### Score
-            
+
             | Metric | Value |
             |--------|-------|
-            | **Macro F1 Score** | **${parseFloat(score).toFixed(4)}** |
-            
+            | **Macro F1** | **${parseFloat(score).toFixed(4)}** |
+            ${extras}
+
+            ✅ The [leaderboard](../blob/main/leaderboard/leaderboard.md) has been updated.
+
             ---
-            
-            ✅ Your submission has been evaluated and the [leaderboard](../blob/main/leaderboard.md) has been updated.
-            
-            ### Baseline Comparison
-            | Model | Macro F1 |
-            |-------|----------|
-            | GraphSAGE | ~0.5500 |
-            | GCN | ~0.5200 |
-            | GIN | ~0.5400 |
-            
-            Can you beat them? 🚀
-            
-            ---
-            
-            *Tips for improvement:*
-            - Try different GNN architectures (GCN, GAT, GIN)
-            - Experiment with hyperparameters (learning rate, hidden dimensions)
-            - Consider class imbalance handling techniques
-            - Use data augmentation for molecular graphs
-            
-            Good luck! 🍀`;
-            
+
+            *Tips: Try different architectures, tune hyperparameters, handle class imbalance.*
+            *See the [interactive leaderboard](https://muuki2.github.io/enigma/leaderboard.html) for full rankings.* 🚀`;
+
             github.rest.issues.createComment({
               issue_number: context.issue.number,
               owner: context.repo.owner,

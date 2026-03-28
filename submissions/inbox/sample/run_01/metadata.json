@@ -1,0 +1,11 @@
+{
+  "team_name": "sample",
+  "model_name": "all-zeros-baseline",
+  "submission_type": "human",
+  "submission_date": "2026-01-01",
+  "description": "Sample submission predicting all zeros (majority class). Use as a template for your own submissions.",
+  "model_architecture": {
+    "type": "constant",
+    "description": "Always predicts class 0"
+  }
+}
